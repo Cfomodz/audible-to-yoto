@@ -15,6 +15,7 @@ Convert your entire Audible library to Yoto-ready audiobooks with proper chapter
 ✅ **Cover Generation** - Download from Open Library or create placeholders  
 ✅ **Yoto Icons** - Proper 16x16 chapter icons  
 ✅ **Playlist JSON** - Auto-generate Yoto playlists  
+✅ **Direct Yoto Upload** - Create MYO cards via the official Yoto API  
 ✅ **Non-Interactive Mode** - Scriptable with `--yes` flag  
 ✅ **Portable** - No hardcoded paths, works anywhere  
 
@@ -38,9 +39,14 @@ audible activation-bytes
 # 5. Convert all audiobooks
 ./convert_audiobooks.sh
 
-# 6. Generate covers, icons, and playlists
+# 6. Generate covers and icons
 python3 generate_covers.py --yes
 python3 generate_chapter_icons.py --yes
+
+# 7. Upload straight to Yoto as MYO playlists (recommended)
+python3 yoto_upload.py --all
+
+# ...or generate playlist JSON for manual/self-hosted upload instead
 python3 generate_playlists.py --yes
 ```
 
@@ -157,7 +163,29 @@ python3 generate_chapter_icons.py --style numbers --yes
 - **Symbols** (shapes) - Visual variety
 - **Miniatures** (tiny covers) - Recognizable
 
-### 4. Generate Playlist JSON
+### 4. Upload to Yoto (recommended)
+
+```bash
+python3 yoto_upload.py --all                # Upload every book
+python3 yoto_upload.py --book "Dune"        # Upload one book
+python3 yoto_upload.py --all --style symbols --yes
+```
+
+Uploads audio, chapter icons, and covers directly to Yoto via the
+official API (https://yoto.dev) and creates a MYO playlist per book —
+no self-hosted server or manual JSON editing needed.
+
+**One-time setup:** create a free client at
+[dashboard.yoto.dev](https://dashboard.yoto.dev/), register the callback
+URL `http://127.0.0.1:8787/callback`, then pass the client ID via
+`--client-id` or `YOTO_CLIENT_ID` (it's remembered after the first run).
+The first run opens a browser to log in to your Yoto account; tokens are
+cached in `~/.config/audible-to-yoto/tokens.json`.
+
+After upload, open the Yoto app (or [my.yotoplay.com](https://my.yotoplay.com)),
+find the playlist under your MYO content, and link it to a blank MYO card.
+
+### 5. Generate Playlist JSON (manual/self-hosted alternative)
 
 ```bash
 python3 generate_playlists.py               # Interactive mode
@@ -165,7 +193,8 @@ python3 generate_playlists.py --yes         # Non-interactive
 python3 generate_playlists.py --audio-url https://myserver.com/audio --yes
 ```
 
-Creates Yoto-compatible JSON files for each book.
+Creates Yoto-compatible JSON files for each book, for workflows where
+you host the audio yourself instead of uploading to Yoto.
 
 ---
 
@@ -220,6 +249,7 @@ audible-to-yoto/
 ├── convert_audiobooks.sh             # Main conversion script
 ├── generate_covers.py                # Cover downloader (400x400)
 ├── generate_chapter_icons.py         # Icon generator (16x16)
+├── yoto_upload.py                    # Direct uploader (Yoto API)
 ├── generate_playlists.py             # Playlist JSON generator
 ├── docs/
 │   ├── YOTO_SPECIFICATIONS.md        # Yoto API specs
@@ -248,12 +278,20 @@ The conversion script tracks progress automatically:
 
 ## Yoto Upload Process
 
-After conversion:
+After conversion, the easy way:
+
+```bash
+python3 yoto_upload.py --all
+```
+
+This uploads everything (audio, icons, cover) through the official Yoto
+API and creates the MYO playlists for you. Alternatively, for a manual
+or self-hosted workflow:
 
 1. **Upload audio files** to your web server
 2. **Upload chapter icons** to Yoto API (get IDs)
 3. **Edit playlist JSON** with icon IDs
-4. **Upload JSON** to Yoto MYO website
+4. **Create the card** with the JSON content via the Yoto API
 
 See [YOTO_WORKFLOW.md](docs/YOTO_WORKFLOW.md) for details.
 

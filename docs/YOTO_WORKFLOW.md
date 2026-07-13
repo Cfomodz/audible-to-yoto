@@ -4,9 +4,30 @@ Step-by-step guide to convert your audiobooks and upload them to Yoto.
 
 ---
 
-## Overview
+## The Short Version (automated upload)
 
-The complete workflow has 7 steps:
+Steps 4-7 below describe the manual/self-hosted route. If you just want
+your books on Yoto, use the uploader instead — it pushes audio, icons,
+and covers through the official Yoto API (https://yoto.dev) and creates
+the MYO playlists for you:
+
+```bash
+./convert_audiobooks.sh
+python3 generate_covers.py --yes
+python3 generate_chapter_icons.py --yes
+python3 yoto_upload.py --all
+```
+
+One-time setup: create a client at https://dashboard.yoto.dev/ with
+callback URL `http://127.0.0.1:8787/callback` and pass its ID via
+`--client-id` or `YOTO_CLIENT_ID`. Then link each uploaded playlist to a
+blank MYO card in the Yoto app.
+
+---
+
+## Overview (manual route)
+
+The complete manual workflow has 7 steps:
 
 1. Convert audiobooks to chapter-split MP3s
 2. Generate book covers (400x400)

@@ -30,6 +30,8 @@ temp_*/
 # Progress and state files
 .conversion_progress
 .cover_progress
+.yoto_uploaded
+.yoto_icon_cache.json
 *.json
 !requirements.json
 !package.json
