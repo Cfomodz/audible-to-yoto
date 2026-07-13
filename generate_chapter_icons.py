@@ -48,6 +48,12 @@ def print_color(text, color):
     print(f"{color}{text}{Colors.NC}")
 
 
+def sanitize_filename(name):
+    """Sanitize filename for safe file operations (must match generate_covers.py)"""
+    name = re.sub(r'[<>:"/\\|?*]', '', name)
+    return name.strip()
+
+
 def create_number_icon(number, output_path, bg_color=(50, 50, 200), text_color=(255, 255, 255)):
     """Create a simple numbered icon (16x16)"""
     try:
@@ -229,7 +235,7 @@ def main():
             continue
         
         chapter_count = len(chapter_files)
-        book_cover_path = BOOK_COVERS_DIR / f"{book_name}.jpg"
+        book_cover_path = BOOK_COVERS_DIR / f"{sanitize_filename(book_name)}.jpg"
         
         # Create icon directory for this book
         if generate_numbers:

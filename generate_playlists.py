@@ -57,6 +57,12 @@ def sanitize_for_url(text):
     return text
 
 
+def sanitize_filename(name):
+    """Sanitize filename for safe file operations (must match generate_covers.py)"""
+    name = re.sub(r'[<>:"/\\|?*]', '', name)
+    return name.strip()
+
+
 def create_playlist_json(book_name, chapter_files, audio_base_url, cover_base_url, use_placeholders=True):
     """Create Yoto playlist JSON for a book"""
     
@@ -131,7 +137,7 @@ Upload to: {audio_base_url}/{sanitize_for_url(book_name)}/
 ## Step 2: Upload Book Cover
 
 Upload the book cover image:
-  - File: yoto_covers/{book_name}.jpg
+  - File: yoto_covers/{sanitize_filename(book_name)}.jpg
   - Upload to: {cover_base_url}/{sanitize_for_url(book_name)}.jpg
 
 ## Step 3: Upload Chapter Icons to Yoto

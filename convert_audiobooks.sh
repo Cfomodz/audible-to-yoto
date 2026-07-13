@@ -27,29 +27,35 @@ echo "Audible to Yoto Converter"
 echo "============================================================"
 echo ""
 
-# Activate virtual environment
-if [ -f "$VENV_PATH/bin/activate" ]; then
-    source "$VENV_PATH/bin/activate"
+# If ACTIVATION_BYTES is already set in the environment, skip audible-cli
+# setup entirely (useful for converting existing AAX files offline or in tests)
+if [ -n "${ACTIVATION_BYTES:-}" ]; then
+    echo -e "${BLUE}Using ACTIVATION_BYTES from environment${NC}"
 else
-    echo -e "${RED}Error: Virtual environment not found at $VENV_PATH${NC}"
-    echo "Run ./setup.sh first to create the virtual environment."
-    exit 1
-fi
+    # Activate virtual environment
+    if [ -f "$VENV_PATH/bin/activate" ]; then
+        source "$VENV_PATH/bin/activate"
+    else
+        echo -e "${RED}Error: Virtual environment not found at $VENV_PATH${NC}"
+        echo "Run ./setup.sh first to create the virtual environment."
+        exit 1
+    fi
 
-# Check if audible-cli is configured
-if [ ! -f ~/.audible/config.toml ]; then
-    echo -e "${YELLOW}Audible CLI not configured. Running quickstart...${NC}"
-    audible quickstart
-fi
+    # Check if audible-cli is configured
+    if [ ! -f ~/.audible/config.toml ]; then
+        echo -e "${YELLOW}Audible CLI not configured. Running quickstart...${NC}"
+        audible quickstart
+    fi
 
-# Get activation bytes dynamically from audible-cli
-echo -e "${BLUE}Retrieving activation bytes from audible-cli...${NC}"
-ACTIVATION_BYTES=$(audible activation-bytes 2>/dev/null)
+    # Get activation bytes dynamically from audible-cli
+    echo -e "${BLUE}Retrieving activation bytes from audible-cli...${NC}"
+    ACTIVATION_BYTES=$(audible activation-bytes 2>/dev/null | tail -n 1 || true)
 
-if [ -z "$ACTIVATION_BYTES" ]; then
-    echo -e "${RED}Error: Could not retrieve activation bytes.${NC}"
-    echo "Make sure audible-cli is configured: audible quickstart"
-    exit 1
+    if [ -z "$ACTIVATION_BYTES" ]; then
+        echo -e "${RED}Error: Could not retrieve activation bytes.${NC}"
+        echo "Make sure audible-cli is configured: audible quickstart"
+        exit 1
+    fi
 fi
 
 echo -e "${GREEN}Activation bytes: $ACTIVATION_BYTES${NC}"
@@ -150,6 +156,9 @@ echo -e "${GREEN}Found $FILE_COUNT AAX file(s) total${NC}"
 if [ -f "$PROGRESS_FILE" ]; then
     completed_count=$(wc -l < "$PROGRESS_FILE")
     remaining=$((FILE_COUNT - completed_count))
+    if [ $remaining -lt 0 ]; then
+        remaining=0
+    fi
     echo -e "${BLUE}Already completed: $completed_count${NC}"
     echo -e "${BLUE}Remaining: $remaining${NC}"
 else
@@ -201,7 +210,7 @@ while IFS= read -r aax_file; do
     # Get chapter information
     echo -e "${BLUE}Extracting chapter information...${NC}"
     chapter_json=$(ffprobe -activation_bytes "$ACTIVATION_BYTES" \
-        -v quiet -print_format json -show_chapters "$aax_file" 2>/dev/null)
+        -v quiet -print_format json -show_chapters "$aax_file" 2>/dev/null || true)
     
     if [ -z "$chapter_json" ]; then
         echo -e "${RED}✗ Failed to read chapters from: $book_name${NC}"
@@ -243,17 +252,17 @@ ch = d['chapters'][$i]
 start = float(ch['start_time'])
 end = float(ch['end_time'])
 title = ch.get('tags', {}).get('title', f'Chapter {$i + 1}')
-# Clean up title
-title = title.replace('/', '-').replace('\\\\', '-')
-print(f'{start}|{end}|{title}')
-" 2>/dev/null)
-        
+# Clean up title: strip path separators and the '|' field delimiter used below
+title = title.replace('/', '-').replace('\\\\', '-').replace('|', '-')
+print(f'{start}|{max(end - start, 0)}|{title}')
+" 2>/dev/null || true)
+
         if [ -z "$chapter_info" ]; then
             continue
         fi
-        
+
         start_time=$(echo "$chapter_info" | cut -d'|' -f1)
-        end_time=$(echo "$chapter_info" | cut -d'|' -f2)
+        duration=$(echo "$chapter_info" | cut -d'|' -f2)
         chapter_title=$(echo "$chapter_info" | cut -d'|' -f3-)
         
         # Format chapter number with leading zeros
@@ -269,15 +278,16 @@ print(f'{start}|{end}|{title}')
         
         echo -e "${BLUE}  [$((i + 1))/$chapter_count] $chapter_title${NC}"
         
-        # Extract chapter
-        if ffmpeg -activation_bytes "$ACTIVATION_BYTES" -i "$aax_file" \
-            -ss "$start_time" -to "$end_time" \
+        # Extract chapter. -ss before -i seeks the input directly instead of
+        # decoding from the start of the book for every chapter.
+        if ffmpeg -activation_bytes "$ACTIVATION_BYTES" \
+            -ss "$start_time" -i "$aax_file" -t "$duration" \
             -vn -c:a libmp3lame -q:a 2 \
             -metadata title="$chapter_title" \
             -metadata track="$((i + 1))/$chapter_count" \
             -metadata album="$book_name" \
             "$output_file" \
-            -y -loglevel error -stats 2>&1 | grep -v "^size="; then
+            -y -loglevel error -nostats; then
             chapter_success=$((chapter_success + 1))
         else
             echo -e "${RED}    ✗ Failed${NC}"

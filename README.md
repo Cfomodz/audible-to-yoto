@@ -1,11 +1,8 @@
 # 🎧 Audible to Yoto Converter
 
-[![Tests](https://github.com/YOUR_USERNAME/audible-to-yoto/workflows/Tests/badge.svg)](https://github.com/YOUR_USERNAME/audible-to-yoto/actions/workflows/test.yml)
-[![Lint](https://github.com/YOUR_USERNAME/audible-to-yoto/workflows/Lint/badge.svg)](https://github.com/YOUR_USERNAME/audible-to-yoto/actions/workflows/lint.yml)
-[![Documentation](https://github.com/YOUR_USERNAME/audible-to-yoto/workflows/Documentation/badge.svg)](https://github.com/YOUR_USERNAME/audible-to-yoto/actions/workflows/docs.yml)
+[![Tests](https://github.com/cfomodz/audible-to-yoto/actions/workflows/test.yml/badge.svg)](https://github.com/cfomodz/audible-to-yoto/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 Convert your entire Audible library to Yoto-ready audiobooks with proper chapter splitting and cover images!
 
