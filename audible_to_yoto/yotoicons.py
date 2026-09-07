@@ -22,7 +22,7 @@ from urllib.parse import urlencode
 import requests
 
 BASE = "https://yotoicons.com"
-USER_AGENT = "audible-to-yoto (+https://github.com/, personal audiobook tool)"
+USER_AGENT = "audible-to-yoto (personal audiobook tool)"
 PER_PAGE = 26
 REQUEST_DELAY = 0.34  # be gentle with a community site
 CACHE_TTL = 30 * 24 * 3600  # the icon library changes slowly; a month is plenty
