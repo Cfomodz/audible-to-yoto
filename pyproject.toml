@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "audible-to-yoto"
+version = "1.0.0"
+description = "Turn your Audible library into Yoto Make-Your-Own cards: chapter-split audio, matched community chapter icons, uploaded and published via the Yoto API."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+dependencies = [
+    "audible-cli>=0.3.3",
+    "Pillow>=10.0",
+    "requests>=2.31",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[project.scripts]
+audible-to-yoto = "audible_to_yoto.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["audible_to_yoto*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
