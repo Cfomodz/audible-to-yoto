@@ -169,10 +169,14 @@ class YotoIconsClient:
         return out
 
     def download(self, icon: Icon) -> bytes:
+        wait = self.delay - (time.monotonic() - self._last_request)
+        if wait > 0:
+            time.sleep(wait)
         try:
             resp = self.session.get(icon.url, timeout=30)
         except requests.RequestException as exc:
             raise YotoIconsError(f"could not download {icon.url}: {exc}") from exc
+        self._last_request = time.monotonic()
         if resp.status_code != 200 or not resp.content:
             raise YotoIconsError(f"could not download {icon.url} ({resp.status_code})")
         return resp.content
