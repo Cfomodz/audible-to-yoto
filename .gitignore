@@ -1,106 +1,21 @@
-# Audiobook files
-*.aax
-*.AAX
-*.mp3
-*.m4b
-*.m4a
-
-# Directories with user content
-aax/
+# User content (downloads, converted audio, generated icons, upload state)
 aax_downloads/
-yoto_mp3/
-yoto_covers/
-yoto_chapter_covers/
-yoto_chapter_icons_16x16/
-yoto_playlists/
-books/
-podcasts/
-art/
-tmp/
-test_*/
-temp_*/
-
-# Generated/downloaded content
-*.jpg
-*.jpeg
-*.png
-*.gif
-*.webp
-
-# Progress and state files
-.conversion_progress
-.cover_progress
-*.json
-!requirements.json
-!package.json
-
-# Activation bytes (sensitive)
-ACTIVATION_BYTES*.txt
-activation.blob
-credentials.json
+work/
+library.json
 
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
 *.egg-info/
-.installed.cfg
-*.egg
+build/
+dist/
 venv/
-ENV/
-env/
-
-# Virtual environments
-venv/
-ENV/
-env/
 .venv/
+.pytest_cache/
 
-# IDE
+# IDE / OS
 .vscode/
 .idea/
 *.swp
-*.swo
-*~
-.DS_Store
-
-# Logs
-*.log
-nohup.out
-
-# Archives
-*.zip
-*.tar.gz
-*.rar
-master.zip
-
-# Downloaded tools/dependencies
-aax2mp3-easy-master/
-AAXtoMP3-master/
-audible-activator/
-audible-activator-master/
-chromedriver*
-*.AppImage
-
-# OS
 .DS_Store
 Thumbs.db
-
-# Backup files
-*_backup
-*.bak
-books_backup.json

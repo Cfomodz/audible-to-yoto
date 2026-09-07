@@ -1,102 +1,29 @@
-# Contributing to Audible to Yoto Converter
+# Contributing
 
-Thank you for considering contributing! Here's how you can help.
+Bug reports and pull requests are welcome.
 
-## How to Contribute
-
-### Reporting Bugs
-
-1. Check if the bug has already been reported in Issues
-2. If not, create a new issue with:
-   - Clear title and description
-   - Steps to reproduce
-   - Expected vs actual behavior
-   - System information (OS, Python version, etc.)
-   - Error messages and logs
-
-### Suggesting Features
-
-1. Check if the feature has been suggested
-2. Create a new issue describing:
-   - The problem it solves
-   - Proposed solution
-   - Alternative solutions considered
-   - Any additional context
-
-### Pull Requests
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes
-4. Test thoroughly
-5. Commit with clear messages
-6. Push to your fork
-7. Open a Pull Request
-
-### Code Style
-
-- Follow PEP 8 for Python code
-- Use meaningful variable names
-- Add comments for complex logic
-- Update documentation as needed
-
-### Testing
-
-- Test your changes with real audiobooks
-- Verify on different operating systems if possible
-- Check that existing functionality still works
-
-## Development Setup
+## Setup
 
 ```bash
-# Clone your fork
-git clone https://github.com/YOUR_USERNAME/audible-to-yoto.git
-cd audible-to-yoto
-
-# Setup development environment
 ./setup.sh
 source venv/bin/activate
-
-# Install development dependencies
-pip install -r requirements.txt
-
-# Make your changes
-# ...
-
-# Test
-./convert_audiobooks.sh
+pytest -q
 ```
 
-## Areas for Contribution
+## Layout
 
-### High Priority
-- Automated icon upload to Yoto API
-- Batch JSON editing with icon IDs
-- Web interface for easier use
-- Docker container
-- Windows support improvements
+- `audible_to_yoto/cli.py` — argparse entry point (`setup`, `login`, `list`, `run`, `icons`)
+- `pipeline.py` — the per-book stages: download, chapters, convert, icons, cover, upload, card
+- `chapters.py`, `card.py`, `pixel.py`, `icon_match.py` — pure logic, fully unit-tested
+- `audible_lib.py`, `convert.py` — audible-cli and ffmpeg wrappers
+- `yotoicons.py`, `icon_gen.py` — the yotoicons.com client and the icon selection pipeline
+- `yoto_auth.py`, `yoto_api.py` — PKCE login and the Yoto API client
 
-### Medium Priority
-- Additional icon styles
-- Cover image quality improvements
-- Progress bar enhancements
-- Logging improvements
+## Guidelines
 
-### Documentation
-- Video tutorials
-- More examples
-- Troubleshooting guides
-- Translation to other languages
-
-## Questions?
-
-Feel free to open an issue for questions or join discussions.
-
-## Code of Conduct
-
-- Be respectful and inclusive
-- Provide constructive feedback
-- Focus on what's best for the project
-- Show empathy towards others
-
-Thank you for contributing! 🎉
+- Keep stages idempotent: a re-run with nothing changed must do no work and send nothing.
+- Prefer pure functions plus a thin I/O wrapper; test the pure part.
+- Do not add interactive prompts outside `setup`.
+- Yoto API facts live in `yoto_api.py` docstrings and come from https://yoto.dev. Cite the doc page when changing an endpoint.
+- yotoicons.com is a volunteer-run community site. Keep the request rate low, cache what you fetch, and keep the uploader credit in `icons.json`.
+- Icon matching must stay deterministic and offline-testable: no network in `icon_match.py`, and tests use a stub client rather than real requests.
