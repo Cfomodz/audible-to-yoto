@@ -27,7 +27,13 @@ class YotoClient:
         for attempt in range(retries):
             headers["Authorization"] = f"Bearer {self.token_provider()}"
             headers.setdefault("Accept", "application/json")
-            resp = self.session.request(method, f"{self.base}{path}", headers=headers, timeout=timeout, **kwargs)
+            try:
+                resp = self.session.request(method, f"{self.base}{path}", headers=headers, timeout=timeout, **kwargs)
+            except requests.RequestException as exc:
+                if attempt < retries - 1:
+                    time.sleep(min(2 ** attempt, 32))
+                    continue
+                raise YotoApiError(f"{method} {path} -> network error: {exc}") from exc
             if resp.status_code in RETRY_STATUSES and attempt < retries - 1:
                 wait = float(resp.headers.get("Retry-After") or min(2 ** attempt, 32))
                 time.sleep(wait)
