@@ -1,6 +1,3 @@
-import json
-from pathlib import Path
-
 from audible_to_yoto.audible_lib import Book
 from audible_to_yoto.pipeline import stage_cards, stage_upload
 from audible_to_yoto.pixel import number_icon, png_bytes
