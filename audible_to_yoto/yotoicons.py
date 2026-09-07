@@ -10,7 +10,9 @@ That is: icon id, category, primary tag, secondary tag, author, download count.
 
 from __future__ import annotations
 
+import hashlib
 import html
+import json
 import re
 import time
 from dataclasses import asdict, dataclass
@@ -23,6 +25,7 @@ BASE = "https://yotoicons.com"
 USER_AGENT = "audible-to-yoto (+https://github.com/, personal audiobook tool)"
 PER_PAGE = 26
 REQUEST_DELAY = 0.34  # be gentle with a community site
+CACHE_TTL = 30 * 24 * 3600  # the icon library changes slowly; a month is plenty
 
 _ICON_RE = re.compile(
     r"populate_icon_modal\(\s*'(?P<id>\d+)'\s*,\s*'(?P<category>[^']*)'\s*,\s*'(?P<tag1>[^']*)'\s*,\s*'(?P<tag2>[^']*)'\s*,\s*'(?P<author>[^']*)'\s*,\s*'(?P<downloads>\d+)'"
@@ -86,12 +89,43 @@ def is_empty_result(page_html: str) -> bool:
 
 
 class YotoIconsClient:
-    def __init__(self, session: requests.Session | None = None, delay: float = REQUEST_DELAY):
+    def __init__(self, session: requests.Session | None = None, delay: float = REQUEST_DELAY, cache_dir: Path | None = None):
         self.session = session or requests.Session()
         self.session.headers.update({"User-Agent": USER_AGENT})
         self.delay = delay
         self._search_cache: dict[tuple[str, int], list[Icon]] = {}
         self._last_request = 0.0
+        self.cache_dir = cache_dir
+        if cache_dir:
+            cache_dir.mkdir(parents=True, exist_ok=True)
+
+    def _cache_file(self, tag: str, page: int) -> Path | None:
+        if not self.cache_dir:
+            return None
+        key = hashlib.sha256(f"{tag.lower()}\x1f{page}".encode("utf-8")).hexdigest()[:24]
+        return self.cache_dir / f"{key}.json"
+
+    def _cached_page(self, tag: str, page: int) -> list[Icon] | None:
+        """Search results are reused across books and runs: the library changes slowly."""
+        path = self._cache_file(tag, page)
+        if not path or not path.exists():
+            return None
+        if time.time() - path.stat().st_mtime > CACHE_TTL:
+            return None
+        try:
+            rows = json.loads(path.read_text())
+        except (json.JSONDecodeError, OSError):
+            return None
+        return [Icon(**row) for row in rows]
+
+    def _store_page(self, tag: str, page: int, icons: list[Icon]) -> None:
+        path = self._cache_file(tag, page)
+        if not path:
+            return
+        try:
+            path.write_text(json.dumps([i.to_dict() for i in icons]))
+        except OSError:
+            pass
 
     def _get(self, path: str, params: dict | None = None) -> str:
         wait = self.delay - (time.monotonic() - self._last_request)
@@ -116,8 +150,11 @@ class YotoIconsClient:
             if key in self._search_cache:
                 found = self._search_cache[key]
             else:
-                body = self._get("/icons", {"tag": tag, "page": page} if page > 1 else {"tag": tag})
-                found = [] if is_empty_result(body) else parse_icons(body)
+                found = self._cached_page(tag, page)
+                if found is None:
+                    body = self._get("/icons", {"tag": tag, "page": page} if page > 1 else {"tag": tag})
+                    found = [] if is_empty_result(body) else parse_icons(body)
+                    self._store_page(tag, page, found)
                 self._search_cache[key] = found
             added = 0
             for icon in found:

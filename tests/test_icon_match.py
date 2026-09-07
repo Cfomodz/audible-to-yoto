@@ -1,7 +1,20 @@
 import pytest
 
 from audible_to_yoto.chapters import Chapter
-from audible_to_yoto.icon_match import assign, book_search_terms, chapter_terms, score, stem, stems, tokens
+from audible_to_yoto.icon_match import (
+    assign,
+    author_terms,
+    book_search_terms,
+    chapter_terms,
+    is_front_matter,
+    matchable_title,
+    related,
+    score,
+    stem,
+    stems,
+    title_word_terms,
+    tokens,
+)
 from audible_to_yoto.yotoicons import Icon
 
 HP = stems(tokens("harry potter", keep_stopwords=True))
@@ -38,15 +51,136 @@ def test_book_search_terms_narrow_progressively():
     assert "j k rowling" in terms
 
 
-def test_book_search_terms_use_series_first():
+def test_book_search_terms_drop_leading_article():
+    """Community tags omit the article: 'hobbit' finds far more than 'the hobbit'."""
+    terms = book_search_terms("The Hobbit")
+    assert terms[0] == "the hobbit"
+    assert "hobbit" in terms
+    assert terms.index("the hobbit") < terms.index("hobbit")
+    assert "a wrinkle in time" in book_search_terms("A Wrinkle in Time")
+    assert "wrinkle in time" in book_search_terms("A Wrinkle in Time")
+
+
+def test_title_is_searched_before_series():
+    """The Hobbit is filed under Lord of the Rings, whose icons fit none of its chapters."""
+    terms = book_search_terms("The Hobbit", series_title="The Lord of the Rings")
+    assert terms[0] == "the hobbit"
+    assert terms.index("hobbit") < terms.index("the lord of the rings")
+
+
+def test_series_is_still_offered_as_a_fallback():
     terms = book_search_terms("The Vanishing Glass", series_title="Harry Potter")
-    assert terms[0] == "harry potter"
+    assert "harry potter" in terms
+
+
+def test_generic_terms_are_not_searched():
+    """Narrowing must stop before 'book' or 'the book', which pull in unrelated icons."""
+    terms = book_search_terms("The Book of Mormon Storybook for Little Saints")
+    assert "book of mormon" in terms
+    for junk in ("book", "the book", "the", "stories", "storybook", "the storybook"):
+        assert junk not in terms
 
 
 def test_chapter_terms():
-    assert chapter_terms(ch(1, "9: The Midnight Duel"))[0] == "midnight duel"
-    assert "duel" in chapter_terms(ch(1, "9: The Midnight Duel"))
+    terms = chapter_terms(ch(1, "9: The Midnight Duel"))
+    assert terms[0] == "midnight duel"
+    assert "duel" in terms and "midnight" in terms
     assert chapter_terms(ch(1, "Opening Credits")) == []
+
+
+def test_chapter_terms_include_pairs_and_single_words():
+    terms = chapter_terms(ch(1, "4: Out of the Frying Pan into the Fire"))
+    assert "frying pan" in terms  # adjacent pair
+    assert "frying" in terms and "fire" in terms  # single words
+    assert len(terms) <= 8
+
+
+def test_author_terms():
+    # Initials are dropped, so "J.K. Rowling" searches the surname only.
+    assert author_terms("J.K. Rowling") == ["rowling"]
+    assert "tolkien" in author_terms("J.R.R. Tolkien")
+    assert author_terms("Madeleine L'Engle") == ["madeleine lengle", "lengle"]
+    assert author_terms("Josh Sabey, Sarah Sabey")[:2] == ["josh sabey", "sabey"]
+    assert author_terms("") == []
+
+
+def test_title_word_terms_skip_weak_and_generic():
+    assert title_word_terms("The Hobbit") == ["hobbit"]
+    assert "black" not in title_word_terms("The Black Cauldron")
+    assert "storybook" not in title_word_terms("The Bible Storybook")
+
+
+def test_weak_single_word_never_matches():
+    """"The Black Thing" must not land on a black sheep."""
+    sheep = icon("30", "Black sheep", "sheep farm")
+    assert score(ch(4, "4: The Black Thing"), sheep, set()) == 0
+    singer = icon("31", "Ed Sheeran", "man red hair")
+    assert score(ch(7, "7: The Man with Red Eyes"), singer, set()) == 0
+
+
+def test_weak_word_rejected_even_for_a_book_icon():
+    generic = icon("32", "dark corridor", "harry potter")
+    assert score(ch(1, "1: The Dark"), generic, HP) == 0
+
+
+@pytest.mark.parametrize("title", [
+    "Opening Credits", "End Credits", "Introduction", "Intro", "Dedication",
+    "Foreword by Madeleine L'Engle", "Afterword by Charlotte Jones Voiklis",
+    "An Appreciation by Ava DuVernay", "Acknowledgements", "About the Author",
+])
+def test_front_matter_is_never_matched(title):
+    assert is_front_matter(title)
+    assert chapter_terms(ch(1, title)) == []
+    assert score(ch(1, title), icon("40", "book", "library"), set()) == 0
+
+
+@pytest.mark.parametrize("title", ["7: The Sorting Hat", "Quidditch", "A dream about a tree"])
+def test_real_chapters_are_not_front_matter(title):
+    assert not is_front_matter(title)
+
+
+def test_byline_is_stripped_before_matching():
+    """A person's name in a byline must not reach unrelated icons."""
+    assert matchable_title("Afterword by Charlotte Jones Voiklis") == "Afterword"
+    assert matchable_title("Chapter 4: The Black Thing") == "The Black Thing"
+    web = icon("41", "Charlotte's Web", "spider pig")
+    assert score(ch(1, "Afterword by Charlotte Jones Voiklis"), web, set()) == 0
+
+
+def test_generic_word_alone_never_matches():
+    shelf = icon("42", "organized bookshelf", "library bookshelf reading")
+    assert score(ch(1, "A sad story"), shelf, set()) == 0
+
+
+def test_weak_words_rejected_however_many_line_up():
+    singer = icon("35", "Ed Sheeran", "man red hair")
+    assert score(ch(7, "7: The Man with Red Eyes"), singer, set()) == 0
+
+
+def test_a_strong_word_alongside_a_weak_one_still_counts():
+    """"The Boy Who Lived" keeps its match: "boy" is weak but "lived" is not."""
+    baby = icon("36", "baby boy", "harry potter boy who lived")
+    assert score(ch(1, "1: The Boy Who Lived"), baby, HP) > 1.2
+
+
+def test_related_containment_thresholds():
+    assert related("trapdoor", "trap") == 0.6
+    assert related("fire", "fireplace") == 0.6
+    assert related("hat", "hatch") == 0.0  # too short to be meaningful
+    assert related("cauldron", "cauldron") == 1.0
+
+
+def test_distinctive_single_word_still_matches():
+    beast = icon("33", "beast", "beauty and the beast")
+    assert score(ch(11, "11: Aunt Beast"), beast, set()) > 1.2
+
+
+def test_containment_links_compound_words():
+    """"Trapdoor" reaches an icon tagged "trap door" once the icon also names the book."""
+    trap = icon("34", "trap door", "harry potter")
+    assert score(ch(16, "16: The Trapdoor"), trap, HP) > 0
+    # On its own, a partial single-word hit from an unrelated icon is not enough.
+    assert score(ch(16, "16: The Trapdoor"), icon("37", "trap door", "hatch"), set()) == 0
 
 
 def test_score_rewards_book_icons():

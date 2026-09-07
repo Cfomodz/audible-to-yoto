@@ -14,7 +14,7 @@ from typing import Callable
 from PIL import Image
 
 from .chapters import Chapter
-from .icon_match import Match, assign, book_search_terms, chapter_terms, stems, tokens
+from .icon_match import Match, assign, author_terms, book_search_terms, chapter_terms, stems, title_word_terms, tokens
 from .pixel import book_icon, contact_sheet, normalize_icon, number_icon, png_bytes
 from .state import WorkDir, load_json, save_json
 from .yotoicons import Icon, YotoIconsClient, YotoIconsError, download_cached
@@ -37,37 +37,60 @@ def chapter_icon(ch: Chapter) -> Image.Image:
 
 
 def find_book_pool(client: YotoIconsClient, title: str, series_title: str = "", author: str = "", log: Callable[[str], None] = print) -> tuple[str, list[Icon]]:
-    """Search progressively broader tags until one returns a usable pool of icons."""
-    best_term, best_pool = "", []
+    """Search progressively broader tags, keeping every icon found along the way.
+
+    The most specific tag that returns anything names the book best, so it decides the label,
+    but broader tags still contribute candidates: "the bible storybook" finds five icons drawn
+    for that book, and "bible" adds two dozen more to choose from.
+    """
+    label = ""
+    pool: list[Icon] = []
+    seen: set[str] = set()
     for term in book_search_terms(title, series_title, author):
         try:
-            pool = client.search(term, pages=POOL_PAGES)
+            found = client.search(term, pages=POOL_PAGES)
         except YotoIconsError as exc:
             log(f"  icons: search for {term!r} failed ({exc})")
             continue
-        if len(pool) > len(best_pool):
-            best_term, best_pool = term, pool
+        if found and not label:
+            label = term
+        for icon in found:
+            if icon.id not in seen:
+                seen.add(icon.id)
+                pool.append(icon)
         if len(pool) >= MIN_POOL:
             break
-    return best_term, best_pool
+    return label, pool
 
 
-def gather_candidates(client: YotoIconsClient, chapters: list[Chapter], matched: dict[int, Match], book_stems: set[str], log: Callable[[str], None]) -> list[Icon]:
-    """Second pass: search the chapter's own words for chapters the book pool could not cover."""
+def gather_candidates(client: YotoIconsClient, chapters: list[Chapter], title: str, author: str, log: Callable[[str], None]) -> list[Icon]:
+    """Search every chapter's title, word pairs, and single words, plus the book's own words.
+
+    Community icons are tagged with what they depict, so a chapter usually finds its icon
+    through one word rather than its whole title. Searches are cached, so the repeated words
+    across a book cost nothing after the first look.
+    """
     extra: dict[str, Icon] = {}
+    terms: list[str] = list(title_word_terms(title)) + [t for t in author_terms(author) if t not in title_word_terms(title)]
     for ch in chapters:
-        if ch.index in matched or ch.credits:
+        if ch.credits:
             continue
-        # Try every phrasing, not just the first that returns anything: the whole title may hit
-        # an unrelated icon while a single key word finds the right one.
         for term in chapter_terms(ch):
-            try:
-                found = client.search(term, pages=1)
-            except YotoIconsError as exc:
-                log(f"  icons: search for {term!r} failed ({exc})")
-                break
-            for icon in found:
+            if term not in terms:
+                terms.append(term)
+
+    failures = 0
+    for term in terms:
+        try:
+            for icon in client.search(term, pages=1):
                 extra.setdefault(icon.id, icon)
+        except YotoIconsError as exc:
+            failures += 1
+            if failures <= 2:
+                log(f"  icons: search for {term!r} failed ({exc})")
+            if failures > 10:
+                log("  icons: too many failed searches, continuing with what was found")
+                break
     return list(extra.values())
 
 
@@ -102,7 +125,8 @@ def generate_icons(
         # must not trigger a fresh search on every run.
         want = lookup_hash(chapters, title, series_title, author, tag)
         if force or meta.get("lookup_hash") != want:
-            matches = _lookup(client or YotoIconsClient(), chapters, title, series_title, author, tag, meta, log)
+            client = client or YotoIconsClient(cache_dir=(cache_dir or (wd.path.parent / ".icon_cache")) / "searches")
+            matches = _lookup(client, chapters, title, series_title, author, tag, meta, log)
             meta["lookup_hash"] = want
         else:
             found = sum(1 for c in chapters if icons.get(str(c.index), {}).get("yotoicon"))
@@ -189,18 +213,30 @@ def _lookup(client: YotoIconsClient, chapters: list[Chapter], title: str, series
             return {}
         term = tag
     else:
-        term, pool = find_book_pool(client, title, series_title, author, log)
+        try:
+            term, pool = find_book_pool(client, title, series_title, author, log)
+        except YotoIconsError as exc:
+            log(f"  icons: yotoicons.com search failed ({exc}); using generated icons")
+            return {}
 
-    if not pool:
-        log("  icons: nothing on yotoicons.com for this book; using generated icons")
+    if pool:
+        log(f"  icons: yotoicons.com tag {term!r} returned {len(pool)} icons")
+    else:
+        log("  icons: nothing on yotoicons.com under this book's name")
+
+    # Icons tagged with the author belong to this book's world too, so treat the author's name
+    # like the book's name: it earns the relevance bonus but is not itself a content match.
+    book_stems = stems(tokens(term, keep_stopwords=True)) if term else set()
+    for author_term in author_terms(author):
+        book_stems |= stems(tokens(author_term, keep_stopwords=True))
+    extra = gather_candidates(client, chapters, title, author, log)
+    candidates = pool + [i for i in extra if i.id not in {p.id for p in pool}]
+    if not candidates:
+        log("  icons: no candidates found at all; using generated icons")
         return {}
-    log(f"  icons: yotoicons.com tag {term!r} returned {len(pool)} icons")
+    log(f"  icons: {len(candidates)} candidate icons after searching chapter titles and words")
 
-    book_stems = stems(tokens(term, keep_stopwords=True))
-    matches = assign(chapters, pool, book_stems)
-    extra = gather_candidates(client, chapters, matches, book_stems, log)
-    if extra:
-        matches = assign(chapters, pool + extra, book_stems)
+    matches = assign(chapters, candidates, book_stems)
     meta["search_tag"] = term
     unmatched = [ch for ch in chapters if ch.index not in matches]
     if unmatched:
